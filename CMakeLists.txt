@@ -8,3 +8,7 @@ find_library(PROGRAM_OPTIONS boost_program_options)
 find_library(FILESYSTEM boost_filesystem)
 find_library(BOOST_SYSTEM boost_system)
 target_link_libraries(defect-detect ${OpenCV_LIBS} ${PROGRAM_OPTIONS} ${FILESYSTEM} ${BOOST_SYSTEM})
+
+#Move the images to the build directory
+file(GLOB IMAGES "images/*")
+file(COPY ${IMAGES} DESTINATION ${CMAKE_BINARY_DIR})
