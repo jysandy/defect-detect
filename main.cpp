@@ -5,7 +5,6 @@
 #include <boost/filesystem.hpp>
 
 bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& marked_image);
-cv::Mat edge_image(cv::Mat in);
 
 int main(int argc, char** argv)
 {
@@ -124,20 +123,4 @@ bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& mark
     {
         return false;
     }
-}
-
-cv::Mat edge_image(cv::Mat in)
-{
-    cv::Mat grad_x;
-    cv::Mat grad_y;
-    int depth = CV_16S;
-
-    cv::Sobel(in, grad_x, depth, 1, 0);
-    cv::Sobel(in, grad_y, depth, 0, 1);
-    cv::convertScaleAbs(grad_x, grad_x);
-    cv::convertScaleAbs(grad_y, grad_y);
-    cv::Mat ret;
-    cv::addWeighted(grad_x, 0.5, grad_y, 0.5, 0, ret);
-
-    return ret;
 }
