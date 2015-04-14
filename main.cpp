@@ -4,7 +4,7 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-bool defect_exists(const cv::Mat& input, const cv::Mat& reference);
+bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& marked_image);
 cv::Mat edge_image(cv::Mat in);
 
 int main(int argc, char** argv)
@@ -46,10 +46,14 @@ int main(int argc, char** argv)
 
     auto reference_image = cv::imread(args_map["reference"].as<string>());
     auto input_image = cv::imread(args_map["input"].as<string>());
+    auto marked_image = cv::Mat();
 
-    if (defect_exists(input_image, reference_image))
+    if (defect_exists(input_image, reference_image, marked_image))
     {
         cout << "Defect found\n";
+        cv::imshow("Defect found!", marked_image);
+        cv::waitKey(0);
+        cv::imwrite("defect.jpg", marked_image);
     }
     else
     {
@@ -59,37 +63,67 @@ int main(int argc, char** argv)
     return 0;
 }
 
-bool defect_exists(const cv::Mat& input, const cv::Mat& reference)
+bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& marked_image)
 {
     cv::Mat gray_input;
     cv::Mat gray_reference;
-    //Convert to grayscale -> median filter -> histeq -> adaptive thresholding -> opening
+    //Convert to grayscale -> histeq -> adaptive thresholding -> opening
 
     cv::cvtColor(input, gray_input, CV_RGB2GRAY);
     cv::cvtColor(reference, gray_reference, CV_RGB2GRAY);
 
-    cv::medianBlur(gray_input, gray_input, 3);
-    cv::medianBlur(gray_reference, gray_reference, 3);
-
     cv::equalizeHist(gray_input, gray_input);
     cv::equalizeHist(gray_reference, gray_reference);
 
-    cv::adaptiveThreshold(gray_input, gray_input, 255.0, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv::THRESH_BINARY, 3, 0);
-    cv::adaptiveThreshold(gray_reference, gray_reference, 255.0, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv::THRESH_BINARY, 3, 0);
+    auto threshold = 150;
+    cv::threshold(gray_input, gray_input, threshold, 255, cv::THRESH_BINARY);
+    cv::threshold(gray_reference, gray_reference, threshold, 255, cv::THRESH_BINARY);
 
     auto strel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-    cv::morphologyEx(gray_input, gray_input, cv::MORPH_OPEN, strel);
-    cv::morphologyEx(gray_reference, gray_reference, cv::MORPH_OPEN, strel);
+    cv::morphologyEx(gray_input, gray_input, cv::MORPH_CLOSE, strel);
+    cv::morphologyEx(gray_reference, gray_reference, cv::MORPH_CLOSE, strel);
 
     cv::Mat xor_result;
     cv::bitwise_xor(gray_input, gray_reference, xor_result);
-    //Open again to get rid of random noise
-    cv::morphologyEx(xor_result, xor_result, cv::MORPH_OPEN, strel);
+    //Get rid of noise
+    cv::medianBlur(xor_result, xor_result, 3);
 
-    //If there are any non-zero pixels then a defect exists.
-    return cv::countNonZero(xor_result) > 1;
+    //If there are non-zero pixels
+    if (cv::countNonZero(xor_result) > 1)
+    {
+        //Outline the defects in red.
+        auto output = input.clone();
+
+        //First color the defect outlines black.
+        cv::Mat defect_mask = 255 - xor_result;
+        cv::cvtColor(defect_mask, defect_mask, CV_GRAY2RGB);
+        cv::bitwise_and(output, defect_mask, output);
+
+        //Change the white pixels in the outline to red.
+        auto color_xor = cv::Mat();
+        auto dilation_strel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+        cv::dilate(xor_result, color_xor, dilation_strel, cv::Point(-1, -1));
+        cv::cvtColor(color_xor, color_xor, CV_GRAY2RGB);
+        for (auto pixel = color_xor.begin<cv::Vec3b>(); pixel != color_xor.end<cv::Vec3b>(); pixel++)
+        {
+            if ((*pixel)[0] > 0
+                || (*pixel)[1] > 0
+                || (*pixel)[2] > 0)
+            {
+                *pixel = cv::Vec3b(0, 0, 255);
+            }
+        }
+
+        //Blend the masked output and the red outline.
+        cv::addWeighted(output, 0.4, color_xor, 1.0, 0, output);
+
+        marked_image = output;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 cv::Mat edge_image(cv::Mat in)
