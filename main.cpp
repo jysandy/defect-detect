@@ -66,7 +66,7 @@ bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& mark
 {
     cv::Mat gray_input;
     cv::Mat gray_reference;
-    //Convert to grayscale -> histeq -> adaptive thresholding -> opening
+    //Convert to grayscale -> histeq -> thresholding -> closing
 
     cv::cvtColor(input, gray_input, CV_RGB2GRAY);
     cv::cvtColor(reference, gray_reference, CV_RGB2GRAY);
@@ -82,6 +82,7 @@ bool defect_exists(const cv::Mat& input, const cv::Mat& reference, cv::Mat& mark
     cv::morphologyEx(gray_input, gray_input, cv::MORPH_CLOSE, strel);
     cv::morphologyEx(gray_reference, gray_reference, cv::MORPH_CLOSE, strel);
 
+    //XOR to detect differences
     cv::Mat xor_result;
     cv::bitwise_xor(gray_input, gray_reference, xor_result);
     //Get rid of noise
